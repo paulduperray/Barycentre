@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BaryEntrepot | Network Design</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIINfQKk6GKPbFMuDr9LOtKAbpZi7Jw42U="
+      crossorigin=""
+    >
+    <link rel="stylesheet" href="styles.css?v=apiincremental1">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">B</span>
+          <div>
+            <h1>BaryEntrepot</h1>
+            <p>Network Design</p>
+          </div>
+        </div>
+
+        <nav class="page-tabs" aria-label="Navigation">
+          <button class="page-tab active" type="button" data-page="dashboard">Carte</button>
+          <button class="page-tab" type="button" data-page="details">Scenarios</button>
+          <button class="page-tab" type="button" data-page="api">API routiere</button>
+        </nav>
+
+        <div class="scenario-chip">
+          <span class="status-dot"></span>
+          <span>Scenario demo France</span>
+        </div>
+      </header>
+
+      <main class="workspace page-view active" id="dashboardPage">
+        <section class="map-section" aria-label="Carte Network Design">
+          <div class="map-toolbar">
+            <div>
+              <p class="eyebrow">Implantation optimale</p>
+              <h2 id="mapTitle">Barycentre geo et routier</h2>
+            </div>
+            <div class="legend" aria-label="Legende">
+              <span><i class="legend-dot client"></i>Client</span>
+              <span><i class="legend-dot production"></i>Site de prod</span>
+              <span><i class="legend-dot geo"></i>Barycentre geo</span>
+              <span><i class="legend-dot road"></i>Candidat routier</span>
+              <span><i class="legend-dot candidate"></i>Candidats</span>
+            </div>
+          </div>
+          <div id="map"></div>
+        </section>
+
+        <aside class="insights-panel" aria-label="Indicateurs et parametres">
+          <section class="solver-panel">
+            <div class="panel-heading">
+              <p class="eyebrow">Parametres</p>
+              <h2>Modele geo</h2>
+            </div>
+
+            <label class="control-row">
+              <span>Cout / km / volume</span>
+              <input id="costRate" type="number" min="0" step="0.05" value="1.80">
+            </label>
+
+            <div class="parameter-copy compact-copy">
+              <p><strong>Cout / km / volume</strong> estime le cout du barycentre geographique uniquement.</p>
+              <p><strong>Volume</strong> est le poids d'un point. Plus il est haut, plus le point attire l'entrepot.</p>
+            </div>
+          </section>
+
+          <section class="parameter-panel">
+            <div class="panel-heading">
+              <p class="eyebrow">Donnees</p>
+              <h2>Couts routiers</h2>
+            </div>
+            <div class="road-cost-actions">
+              <button class="ghost-button" type="button" id="regenerateRoadCosts">Regenerer couts</button>
+              <button class="ghost-button" type="button" id="exportRoadCosts">Exporter CSV</button>
+            </div>
+            <div class="parameter-copy compact-copy">
+              <p>Le mode routier utilise les <strong>distances OSRM</strong> quand elles sont disponibles.</p>
+              <p>En cas d'echec API, la liaison reste en <strong>fallback Haversine</strong> pour ne pas bloquer le POC.</p>
+            </div>
+          </section>
+
+          <section class="dashboard-api-card" id="dashboardApiCard">
+            <div>
+              <p class="eyebrow">Statut OSRM</p>
+              <h2>Distances API</h2>
+            </div>
+            <div class="dashboard-api-status">
+              <span>API OK / total</span>
+              <strong id="dashboardApiStatus">0 / 0</strong>
+            </div>
+            <button class="primary-button" type="button" id="dashboardApiCalculateAll">Calculer distances manquantes</button>
+          </section>
+
+          <section class="alerts-panel" id="alertsPanel" hidden>
+            <div class="panel-heading">
+              <p class="eyebrow">Alertes</p>
+              <h2>Donnees manquantes</h2>
+            </div>
+            <ul id="alertsList"></ul>
+          </section>
+
+          <section class="kpi-panel kpi-section-network">
+            <div class="panel-heading">
+              <p class="eyebrow">KPIs reseau</p>
+              <h2>Synthese donnees</h2>
+            </div>
+
+            <div class="kpi-grid network-kpi-grid">
+              <div class="kpi-card">
+                <span>Volume total</span>
+                <strong id="kpiVolume">0</strong>
+              </div>
+              <div class="kpi-card">
+                <span>Clients</span>
+                <strong id="kpiClients">0</strong>
+              </div>
+              <div class="kpi-card">
+                <span>Sites</span>
+                <strong id="kpiSites">0</strong>
+              </div>
+              <div class="kpi-card">
+                <span>Candidats</span>
+                <strong id="kpiCandidates">0</strong>
+              </div>
+            </div>
+          </section>
+
+          <section class="kpi-panel kpi-section-compare">
+            <div class="panel-heading">
+              <p class="eyebrow">Comparaison implantation</p>
+              <h2>Geo vs routier</h2>
+            </div>
+
+            <div class="compare-kpi-grid">
+              <article class="compare-kpi-box compare-kpi-box-geo">
+                <div class="compare-kpi-title">
+                  <span class="compare-dot geo"></span>
+                  <div>
+                    <p class="eyebrow">Barycentre geographique</p>
+                    <strong>Optimum theorique</strong>
+                  </div>
+                </div>
+                <div class="kpi-grid compare-metrics-grid">
+                  <div class="kpi-card">
+                    <span>Latitude geo</span>
+                    <strong id="geoLat">0</strong>
+                  </div>
+                  <div class="kpi-card">
+                    <span>Longitude geo</span>
+                    <strong id="geoLon">0</strong>
+                  </div>
+                  <div class="kpi-card">
+                    <span>Distance pond.</span>
+                    <strong id="geoDistance">0</strong>
+                  </div>
+                  <div class="kpi-card">
+                    <span>Cout estime</span>
+                    <strong id="geoCost">0</strong>
+                  </div>
+                </div>
+              </article>
+
+              <article class="compare-kpi-box compare-kpi-box-road">
+                <div class="compare-kpi-title">
+                  <span class="compare-dot road"></span>
+                  <div>
+                    <p class="eyebrow">Candidat routier retenu</p>
+                    <strong id="roadCandidate">-</strong>
+                  </div>
+                </div>
+                <div class="kpi-grid compare-metrics-grid">
+                  <div class="kpi-card">
+                    <span>Latitude</span>
+                    <strong id="roadLat">0</strong>
+                  </div>
+                  <div class="kpi-card">
+                    <span>Longitude</span>
+                    <strong id="roadLon">0</strong>
+                  </div>
+                  <div class="kpi-card">
+                    <span>Distance pond.</span>
+                    <strong id="roadDistance">0</strong>
+                  </div>
+                  <div class="kpi-card">
+                    <span>Cout transport</span>
+                    <strong id="roadCost">0</strong>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+        </aside>
+
+        <section class="data-section" aria-label="Tables de donnees">
+          <div class="data-heading">
+            <div>
+              <p class="eyebrow">Donnees reseau</p>
+              <h2>Tables compactes</h2>
+            </div>
+            <div class="data-heading-actions">
+              <button class="ghost-button" type="button" id="setAllVolumes">Volumes + couts = 100</button>
+              <button class="ghost-button" type="button" id="randomizeVolumesCosts">Volumes + couts aleatoires</button>
+            </div>
+          </div>
+
+          <div class="table-grid">
+            <article class="table-panel">
+              <div class="table-toolbar">
+                <div class="table-title">
+                  <i class="legend-dot client"></i>
+                  <span>Clients</span>
+                </div>
+                <div class="table-actions">
+                  <button class="primary-button" type="button" id="addClient">+ Ajouter</button>
+                  <button class="ghost-button compact-button" type="button" id="resetClients" title="Reinitialiser les clients">Reinit.</button>
+                  <button class="icon-button" type="button" id="importClients" title="Importer CSV clients" aria-label="Importer CSV clients">CSV+</button>
+                  <button class="icon-button" type="button" id="exportClients" title="Exporter CSV clients" aria-label="Exporter CSV clients">CSV-</button>
+                  <input id="clientsCsvFile" type="file" accept=".csv,text/csv" hidden>
+                </div>
+              </div>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Code</th>
+                      <th>Nom</th>
+                      <th>Lat</th>
+                      <th>Lon</th>
+                      <th>Vol</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="clientsTable"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="table-panel">
+              <div class="table-toolbar">
+                <div class="table-title">
+                  <i class="legend-dot production"></i>
+                  <span>Sites de prod</span>
+                </div>
+                <div class="table-actions">
+                  <button class="primary-button" type="button" id="addProduction">+ Ajouter</button>
+                  <button class="ghost-button compact-button" type="button" id="resetProduction" title="Reinitialiser les sites de production">Reinit.</button>
+                  <button class="icon-button" type="button" id="importProduction" title="Importer CSV production" aria-label="Importer CSV production">CSV+</button>
+                  <button class="icon-button" type="button" id="exportProduction" title="Exporter CSV production" aria-label="Exporter CSV production">CSV-</button>
+                  <input id="productionCsvFile" type="file" accept=".csv,text/csv" hidden>
+                </div>
+              </div>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Code</th>
+                      <th>Nom</th>
+                      <th>Lat</th>
+                      <th>Lon</th>
+                      <th>Vol</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="productionTable"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="table-panel">
+              <div class="table-toolbar">
+                <div class="table-title">
+                  <i class="legend-dot candidate"></i>
+                  <span>Candidats entrepot</span>
+                </div>
+                <div class="table-actions">
+                  <button class="primary-button" type="button" id="addCandidate">+ Ajouter</button>
+                  <button class="ghost-button compact-button" type="button" id="resetCandidates" title="Reinitialiser les candidats">Reinit.</button>
+                  <button class="icon-button" type="button" id="importCandidates" title="Importer CSV candidats" aria-label="Importer CSV candidats">CSV+</button>
+                  <button class="icon-button" type="button" id="exportCandidates" title="Exporter CSV candidats" aria-label="Exporter CSV candidats">CSV-</button>
+                  <input id="candidatesCsvFile" type="file" accept=".csv,text/csv" hidden>
+                </div>
+              </div>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Code</th>
+                      <th>Nom</th>
+                      <th>Lat</th>
+                      <th>Lon</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="candidatesTable"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <section class="details-page page-view" id="detailsPage" hidden>
+        <div class="details-hero">
+          <div>
+            <p class="eyebrow">Analyse scenarii</p>
+            <h2>Comparaison des candidats entrepot</h2>
+          </div>
+          <div class="details-hero-kpis">
+            <div class="mini-kpi">
+              <span>Meilleur candidat</span>
+              <strong id="detailBestCandidate">-</strong>
+            </div>
+            <div class="mini-kpi">
+              <span>Cout transport</span>
+              <strong id="detailBestCost">-</strong>
+            </div>
+            <div class="mini-kpi">
+              <span>Distance au barycentre geo</span>
+              <strong id="detailGeoGap">-</strong>
+            </div>
+            <div class="mini-kpi">
+              <span>Liaisons generees</span>
+              <strong id="detailLinkCount">-</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="scenario-board" id="scenarioBoard" aria-label="Comparaison visuelle des candidats"></div>
+
+        <section class="scenario-chart-section">
+          <div class="details-heading">
+            <div>
+              <p class="eyebrow">Comparaison globale</p>
+              <h2>Cout et distance par candidat</h2>
+            </div>
+            <div class="stacked-legend">
+              <span><i class="legend-swatch cost"></i>Cout total</span>
+              <span><i class="legend-swatch distance"></i>Distance routiere moyenne</span>
+            </div>
+          </div>
+          <div class="scenario-comparison-chart" id="scenarioComparisonChart"></div>
+        </section>
+
+        <section class="details-section">
+          <div class="details-heading">
+            <div>
+              <p class="eyebrow">Table detaillee</p>
+              <h2>Matrice candidat vers flux</h2>
+            </div>
+            <button class="ghost-button" type="button" id="exportDetailedMatrix">Exporter matrice</button>
+          </div>
+          <div class="details-table-wrap">
+            <table class="details-table">
+              <thead>
+                <tr>
+                  <th>Rang</th>
+                  <th>Candidat</th>
+                  <th>Point</th>
+                  <th>Type</th>
+                  <th>Volume</th>
+                  <th>Haversine km</th>
+                  <th>Routier km</th>
+                  <th>Cout liaison</th>
+                  <th>Cout total</th>
+                  <th>Dist. barycentre geo</th>
+                </tr>
+              </thead>
+              <tbody id="detailedMatrixTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section class="api-page page-view" id="apiPage" hidden>
+        <div class="api-hero">
+          <div>
+            <p class="eyebrow">Connecteur routier</p>
+            <h2>API distances routieres</h2>
+          </div>
+          <div class="api-actions">
+            <button class="primary-button" type="button" id="apiCalculateAll">Calculer distances manquantes</button>
+            <button class="ghost-button" type="button" id="apiTestRoute">Tester 1 liaison</button>
+            <button class="ghost-button" type="button" id="apiExportJson">Exporter JSON</button>
+            <button class="ghost-button" type="button" id="apiExportCsv">Exporter CSV</button>
+          </div>
+        </div>
+
+        <section class="api-config">
+          <label class="api-field api-field-wide">
+            <span>OSRM demo endpoint</span>
+            <textarea id="apiEndpointTemplate" rows="3" readonly>https://router.project-osrm.org/route/v1/driving/{fromLon},{fromLat};{toLon},{toLat}?overview=false</textarea>
+          </label>
+        </section>
+
+        <div class="api-kpi-grid">
+          <div class="mini-kpi">
+            <span>Liaisons</span>
+            <strong id="apiRouteCount">-</strong>
+          </div>
+          <div class="mini-kpi">
+            <span>Haversine total</span>
+            <strong id="apiHaversineTotal">-</strong>
+          </div>
+          <div class="mini-kpi">
+            <span>Routier estime</span>
+            <strong id="apiRoadTotal">-</strong>
+          </div>
+          <div class="mini-kpi api-counter-card" id="apiStatusCard">
+            <span>API OK / total</span>
+            <strong id="apiStatus">Pret</strong>
+          </div>
+        </div>
+
+        <section class="api-preview-grid">
+          <article class="api-panel">
+            <div class="details-heading">
+              <div>
+                <p class="eyebrow">Payload</p>
+                <h2>Apercu JSON</h2>
+              </div>
+            </div>
+            <pre id="apiPayloadPreview" class="api-code"></pre>
+          </article>
+          <article class="api-panel">
+            <div class="details-heading">
+              <div>
+                <p class="eyebrow">Reponse</p>
+                <h2>Dernier test API</h2>
+              </div>
+            </div>
+            <pre id="apiResponsePreview" class="api-code"></pre>
+          </article>
+        </section>
+
+        <section class="details-section">
+          <div class="details-heading">
+            <div>
+              <p class="eyebrow">Routes</p>
+              <h2>Liaisons a recuperer</h2>
+            </div>
+          </div>
+          <div class="api-table-wrap">
+            <table class="api-table">
+              <thead>
+                <tr>
+                  <th>Candidat</th>
+                  <th>Destination</th>
+                  <th>Type</th>
+                  <th>Haversine</th>
+                  <th>Routier</th>
+                  <th>Statut</th>
+                  <th>URL</th>
+                </tr>
+              </thead>
+              <tbody id="apiRoutesTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="app.js?v=apiincremental1"></script>
+  </body>
+</html>
